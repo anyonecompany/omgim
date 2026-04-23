@@ -1,0 +1,33 @@
+# Vercel 배포 제외 목록 — Root Directory는 web/ 이지만 CLI 업로드 시 상위까지 훑기 때문에 명시적으로 걸러냄
+
+# 미디어 파일 (녹강 영상 등 — 수 GB)
+*.mp4
+*.mov
+*.m4a
+*.mp3
+*.wav
+*.aac
+*.flac
+*.webm
+*.mkv
+*.avi
+*.ogg
+*.opus
+*.zip
+
+# Python 로컬 환경
+.venv/
+venv/
+__pycache__/
+*.pyc
+.ruff_cache/
+
+# 출력물
+outputs/
+*.log
+
+# 기타
+.DS_Store
+.env
+.env.local
+tests/fixtures/

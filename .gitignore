@@ -1,0 +1,35 @@
+.env
+.env.local
+__pycache__/
+*.pyc
+.venv/
+venv/
+outputs/
+*.log
+.DS_Store
+.ruff_cache/
+
+# 미디어 파일 전체 — 개인 녹강/테스트 영상은 공개 레포에 포함 금지
+*.mp4
+*.mov
+*.m4a
+*.mp3
+*.wav
+*.aac
+*.flac
+*.webm
+*.mkv
+*.avi
+*.ogg
+*.opus
+*.zip
+
+# Phase 0 로컬 탐색/실험용 스크립트
+*_run.log
+run.log
+
+# 설계/세무 문서 원문 (참고용 원본, 제품 코드 아님)
+AI-SEO.md
+GEO-1.md
+GEO-2.md
+.vercel

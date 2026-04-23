@@ -1,0 +1,83 @@
+@import "tailwindcss";
+@import "pretendard/dist/web/variable/pretendardvariable-dynamic-subset.css";
+
+@theme {
+  /* Font stack — Toss Product Sans 대체: Pretendard Variable */
+  --font-sans:
+    "Pretendard Variable", Pretendard, "Apple SD Gothic Neo", -apple-system,
+    BlinkMacSystemFont, "Noto Sans KR", Roboto, system-ui, sans-serif;
+  --font-mono:
+    "SF Mono", SFMono-Regular, Menlo, Consolas, monospace;
+
+  /* Primary / Brand (interactive) — MASTER.md */
+  --color-brand: #ef4444;
+  --color-brand-hover: #d93b3b;
+  --color-brand-light: #fdecec;
+
+  /* Grey scale (warm undertone) */
+  --color-grey-50: #f9fafb;
+  --color-grey-100: #f2f4f6;
+  --color-grey-200: #e5e8eb;
+  --color-grey-300: #d1d6db;
+  --color-grey-400: #b0b8c1;
+  --color-grey-500: #8b95a1;
+  --color-grey-600: #6b7684;
+  --color-grey-700: #4e5968;
+  --color-grey-800: #333d4b;
+  --color-grey-900: #191f28;
+
+  /* Semantic */
+  --color-success: #03b26c;
+  --color-error: #f04452;
+  --color-warning: #fe9800;
+  --color-caution: #ffc342;
+  --color-info: #18a5a5;
+
+  /* Radius scale */
+  --radius-xs: 4px;
+  --radius-sm: 8px;
+  --radius-md: 12px;
+  --radius-lg: 16px;
+
+  /* Shadows (single layer, pure black, low opacity) */
+  --shadow-level-1: 0 1px 3px rgba(0, 0, 0, 0.06);
+  --shadow-level-2: 0 2px 8px rgba(0, 0, 0, 0.08);
+  --shadow-level-3: 0 4px 12px rgba(0, 0, 0, 0.12);
+  --shadow-level-4: 0 8px 24px rgba(0, 0, 0, 0.16);
+
+  /* Motion — easings */
+  --ease-enter: cubic-bezier(0, 0, 0.2, 1);
+  --ease-exit: cubic-bezier(0.4, 0, 1, 1);
+  --ease-standard: cubic-bezier(0.4, 0, 0.2, 1);
+  --ease-spring: cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+:root {
+  color-scheme: light;
+}
+
+html,
+body {
+  background: #ffffff;
+  color: var(--color-grey-900);
+  font-family: var(--font-sans);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* tabular numerals for financial-style data */
+.tabular-nums {
+  font-variant-numeric: tabular-nums;
+  font-feature-settings: "tnum";
+}
+
+/* Reduced motion */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
