@@ -1,23 +1,87 @@
 "use client";
 
 import { useState } from "react";
-import { Mic, Clock3, Sparkles, FileText } from "lucide-react";
+import {
+  Mic,
+  Clock3,
+  Sparkles,
+  FileText,
+  CircleCheck,
+  CircleAlert,
+  Download,
+  RotateCcw,
+} from "lucide-react";
 import { Dropzone } from "@/components/ui/Dropzone";
 import { Button } from "@/components/ui/Button";
 import { Footer } from "@/components/ui/Footer";
-import { Credits } from "@/components/ui/Credits";
+import { ProgressBar } from "@/components/ui/ProgressBar";
 import { FAQ_ITEMS } from "@/lib/faq";
+import { useUpload, type UploadResult } from "@/lib/use-upload";
 
 export default function Home() {
   const [file, setFile] = useState<File | null>(null);
+  const { state, start, reset } = useUpload();
+  const phase = state.phase;
 
   return (
     <div className="flex flex-1 flex-col">
       <Header />
       <main className="flex flex-1 flex-col items-center px-5 pb-16 pt-10 sm:pt-16">
-        <HeroSection file={file} onFile={setFile} onClear={() => setFile(null)} />
+        <HeroSection />
+
+        <div className="mt-10 w-full flex flex-col items-center">
+          {phase === "idle" && !file && <Dropzone onFile={setFile} />}
+
+          {phase === "idle" && file && (
+            <SelectedFile
+              file={file}
+              onClear={() => setFile(null)}
+              onStart={() => start(file)}
+            />
+          )}
+
+          {phase === "uploading" && (
+            <StageCard
+              title="업로드 중"
+              subtitle={file?.name ?? ""}
+              progressValue={state.progress}
+              note={`${state.progress}% 업로드됨`}
+            />
+          )}
+
+          {phase === "transcribing" && (
+            <StageCard
+              title="전사 중"
+              subtitle={file?.name ?? ""}
+              indeterminate
+              note="AI가 음성을 텍스트로 옮기고 있어요. 1시간 영상 기준 약 1분 소요."
+            />
+          )}
+
+          {phase === "completed" && state.result && (
+            <CompletedCard
+              filename={file?.name ?? "(알 수 없음)"}
+              result={state.result}
+              onReset={() => {
+                setFile(null);
+                reset();
+              }}
+            />
+          )}
+
+          {phase === "failed" && (
+            <FailedCard
+              filename={file?.name ?? ""}
+              error={state.error ?? "알 수 없는 오류"}
+              onReset={() => {
+                setFile(null);
+                reset();
+              }}
+            />
+          )}
+        </div>
+
         <FeatureRow />
-        <Credits />
         <DefinitionSection />
         <StatsSection />
         <FaqSection />
@@ -46,41 +110,31 @@ function Header() {
   );
 }
 
-function HeroSection({
-  file,
-  onFile,
-  onClear,
-}: {
-  file: File | null;
-  onFile: (f: File) => void;
-  onClear: () => void;
-}) {
+function HeroSection() {
   return (
-    <>
-      <section className="w-full max-w-[480px] text-center">
-        <h1 className="text-[30px] font-bold leading-[40px] tracking-tight text-grey-900">
-          영상을 올리면
-          <br />
-          텍스트가 나옵니다
-        </h1>
-        <p className="mt-3 text-[16px] leading-[24px] text-grey-600">
-          1.5시간이 넘는 강의·회의 녹화도 약 1분 안에
-          <br className="hidden sm:inline" /> 한국어 텍스트로 바꿔 드려요.
-        </p>
-      </section>
-
-      <div className="mt-10 w-full flex flex-col items-center">
-        {file ? (
-          <SelectedFile file={file} onClear={onClear} />
-        ) : (
-          <Dropzone onFile={onFile} />
-        )}
-      </div>
-    </>
+    <section className="w-full max-w-[480px] text-center">
+      <h1 className="text-[30px] font-bold leading-[40px] tracking-tight text-grey-900">
+        영상을 올리면
+        <br />
+        텍스트가 나옵니다
+      </h1>
+      <p className="mt-3 text-[16px] leading-[24px] text-grey-600">
+        1.5시간이 넘는 강의·회의 녹화도 약 1분 안에
+        <br className="hidden sm:inline" /> 한국어 텍스트로 바꿔 드려요.
+      </p>
+    </section>
   );
 }
 
-function SelectedFile({ file, onClear }: { file: File; onClear: () => void }) {
+function SelectedFile({
+  file,
+  onClear,
+  onStart,
+}: {
+  file: File;
+  onClear: () => void;
+  onStart: () => void;
+}) {
   const sizeMB = (file.size / 1_000_000).toFixed(1);
   return (
     <div className="w-full max-w-[480px] rounded-md border border-grey-200 bg-white px-5 py-4 shadow-[var(--shadow-level-2)]">
@@ -98,12 +152,143 @@ function SelectedFile({ file, onClear }: { file: File; onClear: () => void }) {
         </Button>
       </div>
       <div className="mt-4">
-        <Button fullWidth size="lg" disabled>
-          전사 시작 — 곧 연결됩니다
+        <Button fullWidth size="lg" onClick={onStart}>
+          전사 시작
         </Button>
-        <p className="mt-2 text-center text-[12px] text-grey-400">
-          업로드·전사 연동은 다음 배포에서 활성화됩니다.
-        </p>
+      </div>
+    </div>
+  );
+}
+
+function StageCard({
+  title,
+  subtitle,
+  progressValue,
+  indeterminate,
+  note,
+}: {
+  title: string;
+  subtitle: string;
+  progressValue?: number;
+  indeterminate?: boolean;
+  note?: string;
+}) {
+  return (
+    <div className="w-full max-w-[480px] rounded-md border border-grey-200 bg-white px-5 py-5 shadow-[var(--shadow-level-2)]">
+      <div className="mb-3">
+        <p className="text-[13px] font-semibold text-grey-700">{title}</p>
+        <p className="mt-0.5 truncate text-[13px] text-grey-500">{subtitle}</p>
+      </div>
+      <ProgressBar
+        value={progressValue}
+        indeterminate={indeterminate}
+      />
+      {note && <p className="mt-2 text-[12px] text-grey-500">{note}</p>}
+    </div>
+  );
+}
+
+function CompletedCard({
+  filename,
+  result,
+  onReset,
+}: {
+  filename: string;
+  result: UploadResult;
+  onReset: () => void;
+}) {
+  const duration = result.durationSec ? formatDuration(result.durationSec) : "";
+  return (
+    <div className="w-full max-w-[480px] rounded-md border border-grey-200 bg-white px-5 py-5 shadow-[var(--shadow-level-2)]">
+      <div className="flex items-start gap-3">
+        <CircleCheck
+          size={24}
+          strokeWidth={2}
+          className="mt-0.5 flex-shrink-0 text-success"
+          aria-hidden
+        />
+        <div className="min-w-0 flex-1">
+          <p className="text-[14px] font-semibold text-grey-900">전사 완료</p>
+          <p className="mt-0.5 truncate text-[13px] text-grey-600">{filename}</p>
+          {duration && (
+            <p className="mt-0.5 text-[12px] text-grey-500 tabular-nums">
+              길이 {duration}
+              {result.costUsd != null &&
+                ` · 비용 $${result.costUsd.toFixed(3)}`}
+            </p>
+          )}
+        </div>
+      </div>
+
+      <div className="mt-4 grid grid-cols-3 gap-2">
+        {result.txtUrl && (
+          <DownloadBtn href={result.txtUrl} label="TXT" />
+        )}
+        {result.srtUrl && (
+          <DownloadBtn href={result.srtUrl} label="SRT" />
+        )}
+        {result.vttUrl && (
+          <DownloadBtn href={result.vttUrl} label="VTT" />
+        )}
+      </div>
+
+      <div className="mt-3">
+        <Button variant="ghost" size="sm" fullWidth onClick={onReset}>
+          <RotateCcw size={14} strokeWidth={1.75} aria-hidden />
+          새 파일 전사
+        </Button>
+      </div>
+    </div>
+  );
+}
+
+function DownloadBtn({ href, label }: { href: string; label: string }) {
+  return (
+    <a
+      href={href}
+      download
+      target="_blank"
+      rel="noopener noreferrer"
+      className="inline-flex h-10 items-center justify-center gap-1.5 rounded-sm border border-grey-200 bg-white text-[13px] font-semibold text-grey-900 hover:border-brand hover:text-brand transition-colors"
+    >
+      <Download size={14} strokeWidth={1.75} aria-hidden />
+      {label}
+    </a>
+  );
+}
+
+function FailedCard({
+  filename,
+  error,
+  onReset,
+}: {
+  filename: string;
+  error: string;
+  onReset: () => void;
+}) {
+  return (
+    <div className="w-full max-w-[480px] rounded-md border border-error/40 bg-white px-5 py-5">
+      <div className="flex items-start gap-3">
+        <CircleAlert
+          size={24}
+          strokeWidth={2}
+          className="mt-0.5 flex-shrink-0 text-error"
+          aria-hidden
+        />
+        <div className="min-w-0 flex-1">
+          <p className="text-[14px] font-semibold text-grey-900">전사 실패</p>
+          {filename && (
+            <p className="mt-0.5 truncate text-[13px] text-grey-500">
+              {filename}
+            </p>
+          )}
+          <p className="mt-1 text-[13px] text-error/90 break-words">{error}</p>
+        </div>
+      </div>
+      <div className="mt-4">
+        <Button variant="secondary" size="md" fullWidth onClick={onReset}>
+          다시 시도
+        </Button>
       </div>
     </div>
   );
@@ -111,9 +296,18 @@ function SelectedFile({ file, onClear }: { file: File; onClear: () => void }) {
 
 function FeatureRow() {
   const items = [
-    { icon: <Clock3 size={18} strokeWidth={1.75} />, label: "1시간 영상 약 1분" },
-    { icon: <Sparkles size={18} strokeWidth={1.75} />, label: "한국어 고정확도" },
-    { icon: <FileText size={18} strokeWidth={1.75} />, label: "txt · srt · vtt 출력" },
+    {
+      icon: <Clock3 size={18} strokeWidth={1.75} />,
+      label: "1시간 영상 약 1분",
+    },
+    {
+      icon: <Sparkles size={18} strokeWidth={1.75} />,
+      label: "한국어 고정확도",
+    },
+    {
+      icon: <FileText size={18} strokeWidth={1.75} />,
+      label: "txt · srt · vtt 출력",
+    },
   ];
   return (
     <ul className="mt-12 flex w-full max-w-[480px] flex-col gap-2 sm:flex-row sm:gap-3">
@@ -172,8 +366,8 @@ function StatsSection() {
   const stats = [
     { label: "누적 전사 분량", value: "10h 11m", caption: "실측 (강의 6편)" },
     { label: "총 처리 시간", value: "7m", caption: "실측 (강의 6편)" },
-    { label: "실시간 대비 속도", value: "~60×", caption: "Deepgram Nova-3" },
-    { label: "한국어 고유명사 인식", value: "정확", caption: "실측 검증" },
+    { label: "실시간 대비 속도", value: "~60×", caption: "AI 엔진" },
+    { label: "한국어 고유명사", value: "정확", caption: "실측 검증" },
   ];
   return (
     <section
@@ -227,4 +421,13 @@ function FaqSection() {
       </p>
     </section>
   );
+}
+
+function formatDuration(sec: number): string {
+  const h = Math.floor(sec / 3600);
+  const m = Math.floor((sec % 3600) / 60);
+  const s = Math.floor(sec % 60);
+  if (h) return `${h}시간 ${m}분 ${s}초`;
+  if (m) return `${m}분 ${s}초`;
+  return `${s}초`;
 }
