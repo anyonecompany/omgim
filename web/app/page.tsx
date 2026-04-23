@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import Image from "next/image";
 import {
   Mic,
   Clock3,
@@ -95,9 +96,14 @@ function Header() {
   return (
     <header className="flex h-14 items-center justify-between px-5 border-b border-grey-200 bg-white">
       <div className="flex items-center gap-2">
-        <span className="flex h-7 w-7 items-center justify-center rounded-sm bg-brand text-white">
-          <Mic size={16} strokeWidth={2} aria-hidden />
-        </span>
+        <Image
+          src="/logo.png"
+          alt="옮김 (Omgim) 로고"
+          width={32}
+          height={32}
+          priority
+          className="rounded-md"
+        />
         <span className="text-[16px] font-semibold text-grey-900 tracking-tight">
           옮김
           <span className="ml-1.5 text-[12px] font-medium text-grey-400 tracking-normal">
