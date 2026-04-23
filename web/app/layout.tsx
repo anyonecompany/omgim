@@ -1,6 +1,9 @@
 import type { Metadata, Viewport } from "next";
+import { GoogleAnalytics } from "@next/third-parties/google";
 import { StructuredData } from "@/components/seo/StructuredData";
 import "./globals.css";
+
+const GA_ID = process.env.NEXT_PUBLIC_GA_ID;
 
 const SITE_URL = "https://omgim.vercel.app";
 const SITE_NAME = "옮김 (Omgim)";
@@ -96,6 +99,7 @@ export default function RootLayout({
         <StructuredData />
         {children}
       </body>
+      {GA_ID && <GoogleAnalytics gaId={GA_ID} />}
     </html>
   );
 }
