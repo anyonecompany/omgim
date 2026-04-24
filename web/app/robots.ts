@@ -1,6 +1,6 @@
 import type { MetadataRoute } from "next";
 
-const SITE_URL = "https://omgim.vercel.app";
+const SITE_URL = "https://omgim.xyz";
 
 const AI_SEARCH_BOTS = [
   "GPTBot",

@@ -5,7 +5,7 @@ import "./globals.css";
 
 const GA_ID = process.env.NEXT_PUBLIC_GA_ID;
 
-const SITE_URL = "https://omgim.vercel.app";
+const SITE_URL = "https://omgim.xyz";
 const SITE_NAME = "옮김 (Omgim)";
 const DESCRIPTION =
   "옮김(Omgim)은 1.5시간 이상의 강의·회의·인터뷰 영상을 드래그 한 번으로 한국어 텍스트(TXT·SRT·VTT)로 옮기는 AI 음성 전사 서비스입니다. 8시간 분량 영상을 약 5분에 전사합니다.";

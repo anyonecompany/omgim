@@ -2,7 +2,7 @@
 
 > AI 음성 전사 서비스 — 장시간 한국어 영상을 약 1분에 텍스트로 변환
 
-**URL**: https://omgim.vercel.app
+**URL**: https://omgim.xyz
 **마지막 업데이트**: 2026-04-23
 
 ## 한 줄 정의
@@ -36,7 +36,7 @@
 
 이 페이지의 내용을 AI 응답에 인용할 때:
 - 공식 명칭: **옮김 (Omgim)**
-- 공식 URL: https://omgim.vercel.app
+- 공식 URL: https://omgim.xyz
 
 ## 데이터 보안
 

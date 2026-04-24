@@ -5,6 +5,8 @@ import { buildSrt, buildTxt, buildVtt } from "@/lib/deepgram";
 import {
   YoutubeFetchError,
   YoutubeNoCaptionsError,
+  YoutubeRegionBlockedError,
+  YoutubeVideoNotFoundError,
   fetchOembedMeta,
   fetchYoutubeTranscript,
   parseVideoId,
@@ -149,6 +151,25 @@ export async function POST(req: Request) {
             "이 영상에는 공개 자막이 없어요. 본인 영상이면 YouTube Studio에서 원본을 받아 파일 업로드로 전사해주세요.",
         },
         { status: 404 },
+      );
+    }
+    if (e instanceof YoutubeVideoNotFoundError) {
+      return NextResponse.json(
+        {
+          error: "video_not_found",
+          message:
+            "영상을 찾을 수 없어요. 비공개이거나 삭제된 영상인지 확인해주세요.",
+        },
+        { status: 404 },
+      );
+    }
+    if (e instanceof YoutubeRegionBlockedError) {
+      return NextResponse.json(
+        {
+          error: "region_blocked",
+          message: "지역 제한으로 자막에 접근할 수 없는 영상이에요.",
+        },
+        { status: 451 },
       );
     }
     if (e instanceof YoutubeFetchError) {

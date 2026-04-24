@@ -4,7 +4,7 @@ import { notFound } from "next/navigation";
 import { Footer } from "@/components/ui/Footer";
 import { getAllSlugs, getPost, formatDate } from "@/lib/blog";
 
-const SITE_URL = "https://omgim.vercel.app";
+const SITE_URL = "https://omgim.xyz";
 
 interface Params {
   params: Promise<{ slug: string }>;
