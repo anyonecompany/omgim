@@ -72,17 +72,24 @@ export async function POST(req: Request) {
         });
 
         const callbackUrl = `${origin}/api/webhook/deepgram?jobId=${jobId}`;
-        const dgRes = await fetch(
-          buildDeepgramAsyncUrl(callbackUrl, { language: lang }),
-          {
+        const dgUrl = buildDeepgramAsyncUrl(callbackUrl, { language: lang });
+
+        // Deepgram 호출 — 5xx 일시 실패 시 1회 재시도
+        const callDeepgram = () =>
+          fetch(dgUrl, {
             method: "POST",
             headers: {
               Authorization: `Token ${process.env.DEEPGRAM_API_KEY}`,
               "Content-Type": "application/json",
             },
             body: JSON.stringify({ url: blob.url }),
-          },
-        );
+          });
+
+        let dgRes = await callDeepgram();
+        if (!dgRes.ok && dgRes.status >= 500) {
+          await new Promise((r) => setTimeout(r, 1500));
+          dgRes = await callDeepgram();
+        }
 
         if (!dgRes.ok) {
           const errText = await dgRes.text();

@@ -1,5 +1,6 @@
 @import "tailwindcss";
-@import "pretendard/dist/web/variable/pretendardvariable-dynamic-subset.css";
+/* Pretendard 동적 서브셋 CSS 는 layout.tsx 의 <head> 에서 parser 와 병렬 로드.
+   여기서 @import 하면 CSSOM blocking 되어 LCP 지연. */
 
 @theme {
   /* Font stack — Toss Product Sans 대체: Pretendard Variable */

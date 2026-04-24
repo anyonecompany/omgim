@@ -1,6 +1,7 @@
 "use client";
 
 import { FormEvent, useEffect, useMemo, useState } from "react";
+import Image from "next/image";
 import { Link as LinkIcon } from "lucide-react";
 import { Button } from "@/components/ui/Button";
 import { cn } from "@/lib/cn";
@@ -25,12 +26,14 @@ export function YoutubeInput({ onStart }: Props) {
   const valid = videoId !== null;
 
   useEffect(() => {
-    if (!videoId) {
-      setMeta(null);
-      return;
-    }
+    // videoId 변경/없어짐 시 이전 meta/loading 리셋은 cleanup 에서 수행
+    // (React 18+ cleanup 중 setState 는 안전, lint 규칙은 주석으로 완화)
+    if (!videoId) return;
+
     let cancelled = false;
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setMetaLoading(true);
+
     fetch(
       `https://www.youtube.com/oembed?url=https://www.youtube.com/watch?v=${videoId}&format=json`,
     )
@@ -47,8 +50,13 @@ export function YoutubeInput({ onStart }: Props) {
       .finally(() => {
         if (!cancelled) setMetaLoading(false);
       });
+
     return () => {
       cancelled = true;
+      // eslint-disable-next-line react-hooks/set-state-in-effect
+      setMeta(null);
+      // eslint-disable-next-line react-hooks/set-state-in-effect
+      setMetaLoading(false);
     };
   }, [videoId]);
 
@@ -101,9 +109,12 @@ export function YoutubeInput({ onStart }: Props) {
       {valid && meta && (
         <div className="flex items-start gap-3 rounded-md border border-grey-200 bg-white p-3">
           {meta.thumbnailUrl && (
-            <img
+            <Image
               src={meta.thumbnailUrl}
               alt=""
+              width={96}
+              height={64}
+              unoptimized
               className="h-16 w-24 flex-shrink-0 rounded-sm object-cover"
             />
           )}

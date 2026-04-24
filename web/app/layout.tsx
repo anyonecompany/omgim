@@ -88,6 +88,9 @@ export const viewport: Viewport = {
   initialScale: 1,
 };
 
+const PRETENDARD_CSS =
+  "https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/variable/pretendardvariable-dynamic-subset.min.css";
+
 export default function RootLayout({
   children,
 }: Readonly<{
@@ -95,6 +98,17 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="ko" className="h-full antialiased">
+      <head>
+        {/* LCP 최적화: CDN preconnect + stylesheet parallel load.
+            globals.css 의 @import 는 CSSOM blocking 이라 head 로 이동 */}
+        <link
+          rel="preconnect"
+          href="https://cdn.jsdelivr.net"
+          crossOrigin="anonymous"
+        />
+        <link rel="dns-prefetch" href="https://cdn.jsdelivr.net" />
+        <link rel="stylesheet" href={PRETENDARD_CSS} />
+      </head>
       <body className="min-h-full flex flex-col bg-white text-grey-900">
         <StructuredData />
         {children}

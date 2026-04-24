@@ -1,4 +1,4 @@
-import { put } from "@vercel/blob";
+import { put, del } from "@vercel/blob";
 import { NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabase";
 import {
@@ -68,6 +68,25 @@ export async function POST(req: Request) {
         completed_at: new Date().toISOString(),
       })
       .eq("id", jobId);
+
+    // 프라이버시: 원본 영상 Blob 삭제 (전사 완료 후 보관 불요)
+    try {
+      const { data: job } = await supabaseAdmin
+        .from("jobs")
+        .select("blob_url")
+        .eq("id", jobId)
+        .single();
+      if (job?.blob_url) {
+        await del(job.blob_url);
+        await supabaseAdmin
+          .from("jobs")
+          .update({ blob_url: null })
+          .eq("id", jobId);
+      }
+    } catch (delErr) {
+      // 삭제 실패해도 전사 결과는 이미 저장됨 — 로그만
+      console.error("[webhook/deepgram] original blob delete failed:", delErr);
+    }
 
     return NextResponse.json({ ok: true });
   } catch (e) {
