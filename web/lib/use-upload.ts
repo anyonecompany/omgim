@@ -3,6 +3,7 @@
 import { upload } from "@vercel/blob/client";
 import { useCallback, useRef, useState } from "react";
 import { getClientKey } from "./client-key";
+import { readMediaDurationSec } from "./video-duration";
 
 export type UploadPhase =
   | "idle"
@@ -59,6 +60,9 @@ export function useUpload() {
       error: null,
     });
 
+    // 클라이언트 측 영상 길이 측정 (쿼터 사전 계산용)
+    const expectedDurationSec = await readMediaDurationSec(file);
+
     try {
       await upload(path, file, {
         access: "public",
@@ -68,6 +72,7 @@ export function useUpload() {
           clientKey,
           filename: file.name,
           size: file.size,
+          expectedDurationSec,
         }),
         onUploadProgress: (ev) => {
           const pct = Math.round((ev.loaded / ev.total) * 100);
@@ -75,12 +80,15 @@ export function useUpload() {
         },
       });
     } catch (e) {
+      const msg = (e as Error).message ?? "업로드 실패";
+      // 서버에서 QUOTA_EXCEEDED:: prefix 로 쿼터 초과 구분
+      const quotaMatch = msg.match(/QUOTA_EXCEEDED::(.*)/);
       setState({
         phase: "failed",
         jobId,
         progress: 0,
         result: null,
-        error: (e as Error).message ?? "업로드 실패",
+        error: quotaMatch ? quotaMatch[1] : msg,
       });
       return;
     }

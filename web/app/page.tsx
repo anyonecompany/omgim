@@ -18,18 +18,27 @@ import { Footer } from "@/components/ui/Footer";
 import { ProgressBar } from "@/components/ui/ProgressBar";
 import { SourceToggle, type Source } from "@/components/ui/SourceToggle";
 import { YoutubeInput } from "@/components/ui/YoutubeInput";
+import { QuotaBanner } from "@/components/ui/QuotaBanner";
 import { FAQ_ITEMS } from "@/lib/faq";
 import { useUpload, type UploadResult } from "@/lib/use-upload";
+import { useQuota } from "@/lib/use-quota";
 
 export default function Home() {
   const [file, setFile] = useState<File | null>(null);
   const [source, setSource] = useState<Source>("upload");
   const { state, start, startYoutube, reset } = useUpload();
+  const { quota, refresh: refreshQuota } = useQuota();
   const phase = state.phase;
   const idle = phase === "idle";
 
   const stageSubtitle =
     source === "youtube" ? "YouTube 링크" : (file?.name ?? "");
+
+  // 전사 완료 시 쿼터 갱신
+  if (phase === "completed") {
+    // side effect within render is OK for idempotent fetch; React will dedupe
+    void refreshQuota();
+  }
 
   return (
     <div className="flex flex-1 flex-col">
@@ -47,6 +56,8 @@ export default function Home() {
               }}
             />
           )}
+
+          {idle && <QuotaBanner quota={quota} source={source} />}
 
           {idle && source === "upload" && !file && (
             <Dropzone onFile={setFile} />
