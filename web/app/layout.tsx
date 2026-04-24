@@ -1,9 +1,13 @@
 import type { Metadata, Viewport } from "next";
-import { GoogleAnalytics } from "@next/third-parties/google";
+import {
+  GoogleAnalytics,
+  GoogleTagManager,
+} from "@next/third-parties/google";
 import { StructuredData } from "@/components/seo/StructuredData";
 import "./globals.css";
 
 const GA_ID = process.env.NEXT_PUBLIC_GA_ID;
+const GTM_ID = process.env.NEXT_PUBLIC_GTM_ID ?? "GTM-NPRMV6RJ";
 
 const SITE_URL = "https://omgim.xyz";
 const SITE_NAME = "옮김 (Omgim)";
@@ -109,6 +113,8 @@ export default function RootLayout({
         <link rel="dns-prefetch" href="https://cdn.jsdelivr.net" />
         <link rel="stylesheet" href={PRETENDARD_CSS} />
       </head>
+      {/* GTM: <head> 스크립트 + <body> noscript iframe 둘 다 자동 주입 */}
+      <GoogleTagManager gtmId={GTM_ID} />
       <body className="min-h-full flex flex-col bg-white text-grey-900">
         <StructuredData />
         {children}
