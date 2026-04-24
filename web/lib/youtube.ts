@@ -67,15 +67,18 @@ function buildResult(
   entries: YoutubeTranscriptEntry[],
   language: string,
 ): YoutubeFetchResult {
+  // youtube-transcript v1.2+ 는 offset/duration 을 ms 단위로 반환. 초로 변환.
+  const toSec = (ms: number) => ms / 1000;
+
   const utterances: DeepgramUtterance[] = entries.map((e) => ({
-    start: e.offset,
-    end: e.offset + e.duration,
+    start: toSec(e.offset),
+    end: toSec(e.offset + e.duration),
     transcript: decodeEntities(e.text),
     words: [],
   }));
 
   const last = entries[entries.length - 1];
-  const durationSec = last ? last.offset + last.duration : 0;
+  const durationSec = last ? toSec(last.offset + last.duration) : 0;
 
   const plainText = utterances
     .map((u) => (u.transcript ?? "").trim())
