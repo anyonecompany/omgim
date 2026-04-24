@@ -134,12 +134,66 @@ export function useUpload() {
     }));
   }, []);
 
+  const startYoutube = useCallback(async (url: string) => {
+    cancelRef.current = false;
+    const clientKey = getClientKey();
+    setState({
+      phase: "transcribing",
+      jobId: null,
+      progress: 100,
+      result: null,
+      error: null,
+    });
+    try {
+      const res = await fetch("/api/youtube", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ url, clientKey }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        setState({
+          phase: "failed",
+          jobId: null,
+          progress: 0,
+          result: null,
+          error:
+            data?.message ??
+            data?.error ??
+            "YouTube 자막을 가져오지 못했어요.",
+        });
+        return;
+      }
+      setState({
+        phase: "completed",
+        jobId: data.jobId,
+        progress: 100,
+        result: {
+          txtUrl: data.result?.txtUrl ?? null,
+          srtUrl: data.result?.srtUrl ?? null,
+          vttUrl: data.result?.vttUrl ?? null,
+          durationSec: data.durationSec ?? null,
+          costUsd: 0,
+        },
+        error: null,
+      });
+    } catch (e) {
+      setState({
+        phase: "failed",
+        jobId: null,
+        progress: 0,
+        result: null,
+        error: (e as Error).message ?? "네트워크 오류",
+      });
+    }
+  }, []);
+
   const reset = useCallback(() => {
     cancelRef.current = true;
     setState(INITIAL);
   }, []);
 
-  return { state, start, reset };
+  return { state, start, startYoutube, reset };
 }
 
 function makeJobId(): string {

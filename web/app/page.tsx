@@ -16,13 +16,20 @@ import { Dropzone } from "@/components/ui/Dropzone";
 import { Button } from "@/components/ui/Button";
 import { Footer } from "@/components/ui/Footer";
 import { ProgressBar } from "@/components/ui/ProgressBar";
+import { SourceToggle, type Source } from "@/components/ui/SourceToggle";
+import { YoutubeInput } from "@/components/ui/YoutubeInput";
 import { FAQ_ITEMS } from "@/lib/faq";
 import { useUpload, type UploadResult } from "@/lib/use-upload";
 
 export default function Home() {
   const [file, setFile] = useState<File | null>(null);
-  const { state, start, reset } = useUpload();
+  const [source, setSource] = useState<Source>("upload");
+  const { state, start, startYoutube, reset } = useUpload();
   const phase = state.phase;
+  const idle = phase === "idle";
+
+  const stageSubtitle =
+    source === "youtube" ? "YouTube 링크" : (file?.name ?? "");
 
   return (
     <div className="flex flex-1 flex-col">
@@ -30,10 +37,22 @@ export default function Home() {
       <main className="flex flex-1 flex-col items-center px-5 pb-16 pt-10 sm:pt-16">
         <HeroSection />
 
-        <div className="mt-10 w-full flex flex-col items-center">
-          {phase === "idle" && !file && <Dropzone onFile={setFile} />}
+        <div className="mt-10 w-full flex flex-col items-center gap-6">
+          {idle && (
+            <SourceToggle
+              value={source}
+              onChange={(s) => {
+                setFile(null);
+                setSource(s);
+              }}
+            />
+          )}
 
-          {phase === "idle" && file && (
+          {idle && source === "upload" && !file && (
+            <Dropzone onFile={setFile} />
+          )}
+
+          {idle && source === "upload" && file && (
             <SelectedFile
               file={file}
               onClear={() => setFile(null)}
@@ -41,10 +60,14 @@ export default function Home() {
             />
           )}
 
+          {idle && source === "youtube" && (
+            <YoutubeInput onStart={(url) => startYoutube(url)} />
+          )}
+
           {phase === "uploading" && (
             <StageCard
               title="업로드 중"
-              subtitle={file?.name ?? ""}
+              subtitle={stageSubtitle}
               progressValue={state.progress}
               note={`${state.progress}% 업로드됨`}
             />
@@ -52,16 +75,24 @@ export default function Home() {
 
           {phase === "transcribing" && (
             <StageCard
-              title="전사 중"
-              subtitle={file?.name ?? ""}
+              title={source === "youtube" ? "자막 가져오는 중" : "전사 중"}
+              subtitle={stageSubtitle}
               indeterminate
-              note="AI가 음성을 텍스트로 옮기고 있어요. 1시간 영상 기준 약 1분 소요."
+              note={
+                source === "youtube"
+                  ? "YouTube 공개 자막을 받아오고 있어요."
+                  : "AI가 음성을 텍스트로 옮기고 있어요. 1시간 영상 기준 약 1분 소요."
+              }
             />
           )}
 
           {phase === "completed" && state.result && (
             <CompletedCard
-              filename={file?.name ?? "(알 수 없음)"}
+              filename={
+                source === "youtube"
+                  ? "YouTube 자막"
+                  : (file?.name ?? "(알 수 없음)")
+              }
               result={state.result}
               onReset={() => {
                 setFile(null);
@@ -72,12 +103,21 @@ export default function Home() {
 
           {phase === "failed" && (
             <FailedCard
-              filename={file?.name ?? ""}
+              filename={stageSubtitle}
               error={state.error ?? "알 수 없는 오류"}
               onReset={() => {
                 setFile(null);
                 reset();
               }}
+              onSwitchToUpload={
+                source === "youtube"
+                  ? () => {
+                      setSource("upload");
+                      setFile(null);
+                      reset();
+                    }
+                  : undefined
+              }
             />
           )}
         </div>
@@ -267,10 +307,12 @@ function FailedCard({
   filename,
   error,
   onReset,
+  onSwitchToUpload,
 }: {
   filename: string;
   error: string;
   onReset: () => void;
+  onSwitchToUpload?: () => void;
 }) {
   return (
     <div className="w-full max-w-[480px] rounded-md border border-error/40 bg-white px-5 py-5">
@@ -291,7 +333,17 @@ function FailedCard({
           <p className="mt-1 text-[13px] text-error/90 break-words">{error}</p>
         </div>
       </div>
-      <div className="mt-4">
+      <div className="mt-4 space-y-2">
+        {onSwitchToUpload && (
+          <Button
+            variant="primary"
+            size="md"
+            fullWidth
+            onClick={onSwitchToUpload}
+          >
+            파일 업로드로 전환
+          </Button>
+        )}
         <Button variant="secondary" size="md" fullWidth onClick={onReset}>
           다시 시도
         </Button>
