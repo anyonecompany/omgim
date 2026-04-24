@@ -16,16 +16,26 @@ export interface DeepgramUtterance {
   words?: DeepgramWord[];
 }
 
-export function buildDeepgramAsyncUrl(callbackUrl: string): string {
+export type TranscribeLanguage = "auto" | "ko" | "en";
+
+export function buildDeepgramAsyncUrl(
+  callbackUrl: string,
+  opts?: { language?: TranscribeLanguage },
+): string {
   const params = new URLSearchParams({
     model: DEEPGRAM_MODEL,
-    language: "ko",
     smart_format: "true",
     punctuate: "true",
     utterances: "true",
     diarize: "false",
     callback: callbackUrl,
   });
+  const lang = opts?.language ?? "auto";
+  if (lang === "auto") {
+    params.set("detect_language", "true");
+  } else {
+    params.set("language", lang);
+  }
   return `https://api.deepgram.com/v1/listen?${params.toString()}`;
 }
 

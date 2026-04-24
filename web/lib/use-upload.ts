@@ -43,7 +43,10 @@ export function useUpload() {
   const [state, setState] = useState<UploadState>(INITIAL);
   const cancelRef = useRef(false);
 
-  const start = useCallback(async (file: File) => {
+  const start = useCallback(async (
+    file: File,
+    opts?: { language?: "auto" | "ko" | "en" },
+  ) => {
     cancelRef.current = false;
     const clientKey = getClientKey();
     const jobId = makeJobId();
@@ -73,6 +76,7 @@ export function useUpload() {
           filename: file.name,
           size: file.size,
           expectedDurationSec,
+          language: opts?.language ?? "auto",
         }),
         onUploadProgress: (ev) => {
           const pct = Math.round((ev.loaded / ev.total) * 100);

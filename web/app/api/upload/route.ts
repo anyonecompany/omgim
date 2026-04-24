@@ -1,8 +1,10 @@
 import { handleUpload, type HandleUploadBody } from "@vercel/blob/client";
 import { NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabase";
-import { buildDeepgramAsyncUrl } from "@/lib/deepgram";
+import { buildDeepgramAsyncUrl, type TranscribeLanguage } from "@/lib/deepgram";
 import { DAILY_QUOTA_MIN, getUsedMinutesToday } from "@/lib/quota";
+
+const ALLOWED_LANGS: TranscribeLanguage[] = ["auto", "ko", "en"];
 
 export const runtime = "nodejs";
 export const maxDuration = 60;
@@ -49,9 +51,15 @@ export async function POST(req: Request) {
         };
       },
       onUploadCompleted: async ({ blob, tokenPayload }) => {
-        const { jobId, clientKey, filename, size } = JSON.parse(
+        const { jobId, clientKey, filename, size, language } = JSON.parse(
           tokenPayload ?? "{}",
         );
+
+        const lang: TranscribeLanguage = ALLOWED_LANGS.includes(
+          language as TranscribeLanguage,
+        )
+          ? (language as TranscribeLanguage)
+          : "auto";
 
         await supabaseAdmin.from("jobs").upsert({
           id: jobId,
@@ -64,14 +72,17 @@ export async function POST(req: Request) {
         });
 
         const callbackUrl = `${origin}/api/webhook/deepgram?jobId=${jobId}`;
-        const dgRes = await fetch(buildDeepgramAsyncUrl(callbackUrl), {
-          method: "POST",
-          headers: {
-            Authorization: `Token ${process.env.DEEPGRAM_API_KEY}`,
-            "Content-Type": "application/json",
+        const dgRes = await fetch(
+          buildDeepgramAsyncUrl(callbackUrl, { language: lang }),
+          {
+            method: "POST",
+            headers: {
+              Authorization: `Token ${process.env.DEEPGRAM_API_KEY}`,
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify({ url: blob.url }),
           },
-          body: JSON.stringify({ url: blob.url }),
-        });
+        );
 
         if (!dgRes.ok) {
           const errText = await dgRes.text();

@@ -19,6 +19,10 @@ import { ProgressBar } from "@/components/ui/ProgressBar";
 import { SourceToggle, type Source } from "@/components/ui/SourceToggle";
 import { YoutubeInput } from "@/components/ui/YoutubeInput";
 import { QuotaBanner } from "@/components/ui/QuotaBanner";
+import {
+  LanguagePicker,
+  type TranscribeLanguage,
+} from "@/components/ui/LanguagePicker";
 import { FAQ_ITEMS } from "@/lib/faq";
 import { useUpload, type UploadResult } from "@/lib/use-upload";
 import { useQuota } from "@/lib/use-quota";
@@ -26,6 +30,7 @@ import { useQuota } from "@/lib/use-quota";
 export default function Home() {
   const [file, setFile] = useState<File | null>(null);
   const [source, setSource] = useState<Source>("upload");
+  const [language, setLanguage] = useState<TranscribeLanguage>("auto");
   const { state, start, startYoutube, reset } = useUpload();
   const { quota, refresh: refreshQuota } = useQuota();
   const phase = state.phase;
@@ -66,8 +71,10 @@ export default function Home() {
           {idle && source === "upload" && file && (
             <SelectedFile
               file={file}
+              language={language}
+              onLanguageChange={setLanguage}
               onClear={() => setFile(null)}
-              onStart={() => start(file)}
+              onStart={() => start(file, { language })}
             />
           )}
 
@@ -185,10 +192,14 @@ function HeroSection() {
 
 function SelectedFile({
   file,
+  language,
+  onLanguageChange,
   onClear,
   onStart,
 }: {
   file: File;
+  language: TranscribeLanguage;
+  onLanguageChange: (l: TranscribeLanguage) => void;
   onClear: () => void;
   onStart: () => void;
 }) {
@@ -208,7 +219,10 @@ function SelectedFile({
           다시 선택
         </Button>
       </div>
-      <div className="mt-4">
+      <div className="mt-4 flex justify-center">
+        <LanguagePicker value={language} onChange={onLanguageChange} />
+      </div>
+      <div className="mt-3">
         <Button fullWidth size="lg" onClick={onStart}>
           전사 시작
         </Button>
