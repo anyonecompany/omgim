@@ -17,8 +17,6 @@ const ID_PATTERNS: RegExp[] = [
   /(?:m\.youtube\.com\/watch\?(?:[^&]*&)*v=)([\w-]{11})/,
 ];
 
-// User-Agent 와 Accept-Language 로 bot detection 완화.
-// Vercel 서버 IP 라도 정상 브라우저 헤더 복제 시 timedtext 응답 정상.
 const HTTP_HEADERS = {
   "User-Agent":
     "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36",
@@ -36,60 +34,72 @@ export function parseVideoId(raw: string): string | null {
   return null;
 }
 
-interface CaptionTrack {
-  lang: string;
-  kind: "manual" | "asr";
-  name: string; // 비어 있을 수 있음
+interface RawCaptionTrack {
+  baseUrl: string;
+  languageCode: string;
+  kind?: string; // "asr" 또는 undefined (수동)
+  name?: { simpleText?: string; runs?: { text: string }[] };
 }
 
 /**
- * YouTube 의 공식 timedtext 리스트 엔드포인트를 호출해 사용 가능한 자막 트랙을 받음.
- * 비공식 스크래퍼(youtube-transcript) 대신 이 엔드포인트는 브라우저 플레이어가
- * 자막 메뉴를 그릴 때 실제로 호출하는 경로라 훨씬 안정적.
+ * YouTube watch 페이지 HTML 을 받아 ytInitialPlayerResponse 안의
+ * captionTracks 배열을 추출. 각 트랙은 서명된 baseUrl 포함.
  */
-async function fetchTrackList(videoId: string): Promise<CaptionTrack[]> {
-  const url = `https://www.youtube.com/api/timedtext?type=list&v=${videoId}`;
+async function fetchCaptionTracks(videoId: string): Promise<RawCaptionTrack[]> {
+  const url = `https://www.youtube.com/watch?v=${videoId}`;
   const res = await fetch(url, { headers: HTTP_HEADERS, cache: "no-store" });
+
   if (res.status === 404) throw new YoutubeVideoNotFoundError(videoId);
   if (res.status === 403) throw new YoutubeRegionBlockedError(videoId);
   if (!res.ok) {
-    throw new YoutubeFetchError(videoId, `track list status ${res.status}`);
+    throw new YoutubeFetchError(videoId, `watch status ${res.status}`);
   }
 
-  const xml = await res.text();
-  const tracks: CaptionTrack[] = [];
-  const re = /<track\b[^>]*\/>/g;
-  const attrRe = (name: string) =>
-    new RegExp(`\\b${name}="([^"]*)"`);
+  const html = await res.text();
 
-  const matches = xml.match(re) ?? [];
-  for (const tag of matches) {
-    const lang = tag.match(attrRe("lang_code"))?.[1] ?? "";
-    const kindRaw = tag.match(attrRe("kind"))?.[1] ?? "";
-    const name = tag.match(attrRe("name"))?.[1] ?? "";
-    if (!lang) continue;
-    tracks.push({
-      lang,
-      kind: kindRaw === "asr" ? "asr" : "manual",
-      name,
-    });
+  // 영상이 삭제·비공개 인 경우 시그널
+  if (
+    html.includes("Video unavailable") &&
+    !html.includes('"captionTracks"')
+  ) {
+    throw new YoutubeVideoNotFoundError(videoId);
   }
-  return tracks;
+
+  // "captionTracks":[...] 를 게으르게 매칭 — 다음 주요 키 직전까지
+  const match = html.match(
+    /"captionTracks":(\[.*?\])(?=,"(?:audioTracks|translationLanguages|defaultAudioTrackIndex))/,
+  );
+  if (!match) {
+    // captionTracks 필드 자체가 없으면 이 영상에 자막 없음
+    return [];
+  }
+
+  let parsed: RawCaptionTrack[];
+  try {
+    parsed = JSON.parse(match[1]) as RawCaptionTrack[];
+  } catch {
+    throw new YoutubeFetchError(videoId, "captionTracks parse failed");
+  }
+
+  // baseUrl 안의 & 같은 이스케이프는 JSON.parse 가 이미 처리함
+  return parsed.filter((t) => t.baseUrl && t.languageCode);
 }
 
-function selectBestTrack(tracks: CaptionTrack[]): CaptionTrack | null {
+function selectBestTrack(
+  tracks: RawCaptionTrack[],
+): RawCaptionTrack | null {
   if (tracks.length === 0) return null;
-  const prefs: Array<(t: CaptionTrack) => boolean> = [
-    (t) => t.lang === "ko" && t.kind === "manual",
-    (t) => t.lang.startsWith("ko") && t.kind === "manual",
-    (t) => t.lang === "en" && t.kind === "manual",
-    (t) => t.lang.startsWith("en") && t.kind === "manual",
-    (t) => t.lang === "ko" && t.kind === "asr",
-    (t) => t.lang.startsWith("ko") && t.kind === "asr",
-    (t) => t.lang === "en" && t.kind === "asr",
-    (t) => t.lang.startsWith("en") && t.kind === "asr",
-    (t) => t.kind === "manual",
-    (t) => t.kind === "asr",
+  const prefs: Array<(t: RawCaptionTrack) => boolean> = [
+    (t) => t.languageCode === "ko" && t.kind !== "asr",
+    (t) => t.languageCode.startsWith("ko") && t.kind !== "asr",
+    (t) => t.languageCode === "en" && t.kind !== "asr",
+    (t) => t.languageCode.startsWith("en") && t.kind !== "asr",
+    (t) => t.languageCode === "ko" && t.kind === "asr",
+    (t) => t.languageCode.startsWith("ko") && t.kind === "asr",
+    (t) => t.languageCode === "en" && t.kind === "asr",
+    (t) => t.languageCode.startsWith("en") && t.kind === "asr",
+    (t) => t.kind !== "asr",
+    () => true,
   ];
   for (const pred of prefs) {
     const found = tracks.find(pred);
@@ -109,17 +119,10 @@ interface Json3Response {
 
 async function fetchJson3(
   videoId: string,
-  track: CaptionTrack,
+  baseUrl: string,
 ): Promise<Json3Response> {
-  const params = new URLSearchParams({
-    v: videoId,
-    lang: track.lang,
-    fmt: "json3",
-  });
-  if (track.kind === "asr") params.set("kind", "asr");
-  if (track.name) params.set("name", track.name);
-
-  const url = `https://www.youtube.com/api/timedtext?${params.toString()}`;
+  const sep = baseUrl.includes("?") ? "&" : "?";
+  const url = `${baseUrl}${sep}fmt=json3`;
   const res = await fetch(url, { headers: HTTP_HEADERS, cache: "no-store" });
   if (!res.ok) {
     throw new YoutubeFetchError(videoId, `json3 status ${res.status}`);
@@ -166,17 +169,19 @@ function parseJson3(
 export async function fetchYoutubeTranscript(
   videoId: string,
 ): Promise<YoutubeFetchResult> {
-  const tracks = await fetchTrackList(videoId);
+  const tracks = await fetchCaptionTracks(videoId);
   if (tracks.length === 0) {
     throw new YoutubeNoCaptionsError(videoId);
   }
+
   const track = selectBestTrack(tracks);
   if (!track) {
     throw new YoutubeNoCaptionsError(videoId);
   }
 
-  const json3 = await fetchJson3(videoId, track);
+  const json3 = await fetchJson3(videoId, track.baseUrl);
   const parsed = parseJson3(json3);
+
   if (parsed.utterances.length === 0) {
     throw new YoutubeNoCaptionsError(videoId);
   }
@@ -185,9 +190,9 @@ export async function fetchYoutubeTranscript(
     utterances: parsed.utterances,
     plainText: parsed.plainText,
     durationSec: parsed.durationSec,
-    language: track.lang,
+    language: track.languageCode,
     videoId,
-    captionKind: track.kind,
+    captionKind: track.kind === "asr" ? "asr" : "manual",
   };
 }
 
