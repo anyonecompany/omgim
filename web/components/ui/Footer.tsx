@@ -6,20 +6,26 @@ export function Footer() {
       <div className="mx-auto flex w-full max-w-[640px] flex-col items-center gap-2 text-center">
         <p className="text-[13px] font-semibold text-grey-700">옮김 · Omgim</p>
         <nav
-          aria-label="정책 링크"
-          className="flex items-center gap-3 text-[12px] text-grey-500"
+          aria-label="서비스 링크"
+          className="flex flex-wrap items-center justify-center gap-x-3 gap-y-1 text-[12px] text-grey-500"
         >
-          <Link
-            href="/terms"
-            className="hover:text-grey-900 transition-colors"
-          >
+          <Link href="/about" className="hover:text-grey-900 transition-colors">
+            소개
+          </Link>
+          <span className="text-grey-300" aria-hidden>·</span>
+          <Link href="/blog" className="hover:text-grey-900 transition-colors">
+            블로그
+          </Link>
+          <span className="text-grey-300" aria-hidden>·</span>
+          <Link href="/contact" className="hover:text-grey-900 transition-colors">
+            문의
+          </Link>
+          <span className="text-grey-300" aria-hidden>·</span>
+          <Link href="/terms" className="hover:text-grey-900 transition-colors">
             이용약관
           </Link>
-          <span className="text-grey-300">·</span>
-          <Link
-            href="/privacy"
-            className="hover:text-grey-900 transition-colors"
-          >
+          <span className="text-grey-300" aria-hidden>·</span>
+          <Link href="/privacy" className="hover:text-grey-900 transition-colors">
             개인정보 처리방침
           </Link>
         </nav>

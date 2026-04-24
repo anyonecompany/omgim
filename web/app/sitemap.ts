@@ -1,10 +1,12 @@
 import type { MetadataRoute } from "next";
+import { POSTS } from "@/lib/blog";
 
 const SITE_URL = "https://omgim.vercel.app";
 
 export default function sitemap(): MetadataRoute.Sitemap {
-  const lastModified = new Date("2026-04-23");
-  return [
+  const lastModified = new Date("2026-04-24");
+
+  const staticPages: MetadataRoute.Sitemap = [
     {
       url: SITE_URL,
       lastModified,
@@ -13,22 +15,43 @@ export default function sitemap(): MetadataRoute.Sitemap {
       alternates: { languages: { "ko-KR": SITE_URL } },
     },
     {
-      url: `${SITE_URL}/#about`,
+      url: `${SITE_URL}/about`,
       lastModified,
       changeFrequency: "monthly",
       priority: 0.8,
     },
     {
-      url: `${SITE_URL}/#stats`,
+      url: `${SITE_URL}/contact`,
+      lastModified,
+      changeFrequency: "yearly",
+      priority: 0.6,
+    },
+    {
+      url: `${SITE_URL}/blog`,
       lastModified,
       changeFrequency: "weekly",
-      priority: 0.7,
-    },
-    {
-      url: `${SITE_URL}/#faq`,
-      lastModified,
-      changeFrequency: "monthly",
       priority: 0.8,
     },
+    {
+      url: `${SITE_URL}/terms`,
+      lastModified,
+      changeFrequency: "yearly",
+      priority: 0.3,
+    },
+    {
+      url: `${SITE_URL}/privacy`,
+      lastModified,
+      changeFrequency: "yearly",
+      priority: 0.3,
+    },
   ];
+
+  const blogPages: MetadataRoute.Sitemap = POSTS.map((post) => ({
+    url: `${SITE_URL}/blog/${post.slug}`,
+    lastModified: new Date(post.updatedAt ?? post.publishedAt),
+    changeFrequency: "monthly" as const,
+    priority: 0.7,
+  }));
+
+  return [...staticPages, ...blogPages];
 }
