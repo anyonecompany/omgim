@@ -1,0 +1,6 @@
+__pycache__
+*.pyc
+.venv
+.env
+fly.toml
+README.md

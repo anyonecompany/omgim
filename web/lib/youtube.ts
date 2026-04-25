@@ -13,7 +13,7 @@ export interface YoutubeFetchResult {
   durationSec: number;
   language: string;
   videoId: string;
-  source: "innertube" | "library";
+  source: "worker" | "innertube" | "library";
   client?: string;
 }
 
@@ -432,11 +432,122 @@ async function fetchViaLibrary(videoId: string): Promise<YoutubeFetchResult> {
   throw new YoutubeFetchError(videoId, msg || "unknown library error");
 }
 
+// ---- Worker (Fly.io omgim-yt) ----
+//
+// Vercel IP 가 봇 감지 시스템에 등록돼 captionTracks 가 비워진 응답을 받기 때문에,
+// nrt 리전 Fly.io worker 가 youtube_transcript_api 로 직접 추출한 결과를 반환받는다.
+// 환경변수 미설정이거나 worker 가 응답 못하면 Innertube → library fallback 으로 폴백.
+
+interface WorkerSegment {
+  start: number;
+  end: number;
+  text: string;
+}
+interface WorkerResponse {
+  videoId: string;
+  language: string;
+  kind: "manual" | "asr";
+  segments: WorkerSegment[];
+  plainText: string;
+  durationSec: number;
+}
+interface WorkerError {
+  detail?: {
+    error?: string;
+    message?: string;
+  };
+}
+
+async function fetchViaWorker(
+  videoId: string,
+): Promise<{ result?: YoutubeFetchResult; error?: string; status?: number }> {
+  const baseUrl = process.env.YT_WORKER_URL;
+  const apiKey = process.env.YT_WORKER_API_KEY;
+  if (!baseUrl) return { error: "no_worker_url" };
+
+  const url = `${baseUrl.replace(/\/$/, "")}/transcript?video_id=${encodeURIComponent(videoId)}`;
+  const headers: Record<string, string> = { Accept: "application/json" };
+  if (apiKey) headers["X-API-Key"] = apiKey;
+
+  let res: Response;
+  try {
+    res = await fetch(url, {
+      method: "GET",
+      headers,
+      cache: "no-store",
+      signal: AbortSignal.timeout(20_000),
+    });
+  } catch (e) {
+    return { error: `network: ${(e as Error).message}` };
+  }
+
+  const status = res.status;
+  if (!res.ok) {
+    let parsed: WorkerError = {};
+    try {
+      parsed = (await res.json()) as WorkerError;
+    } catch {
+      // ignore
+    }
+    return {
+      status,
+      error: parsed.detail?.error ?? `http_${status}`,
+    };
+  }
+
+  const data = (await res.json()) as WorkerResponse;
+  if (!data.segments || data.segments.length === 0) {
+    return { status, error: "no_captions" };
+  }
+
+  const utterances: DeepgramUtterance[] = data.segments.map((s) => ({
+    start: s.start,
+    end: s.end,
+    transcript: s.text,
+    words: [],
+  }));
+
+  return {
+    result: {
+      utterances,
+      plainText: data.plainText,
+      durationSec: data.durationSec,
+      language: data.language,
+      videoId: data.videoId,
+      source: "worker",
+      client: data.kind,
+    },
+  };
+}
+
 // ---- Public entry ----
 
 export async function fetchYoutubeTranscript(
   videoId: string,
 ): Promise<YoutubeFetchResult> {
+  // 1차: Fly.io worker (가장 안정적)
+  const worker = await fetchViaWorker(videoId);
+  if (worker.result) {
+    if (process.env.NODE_ENV !== "production") {
+      console.log(`[youtube] worker success: ${worker.result.client}`);
+    }
+    return worker.result;
+  }
+
+  // worker 가 명시적으로 영상 자체 문제를 보고했으면 즉시 노출 (Innertube 가 우회 못함)
+  if (worker.error === "video_not_found" || worker.error === "video_private") {
+    throw new YoutubeVideoNotFoundError(videoId);
+  }
+  if (worker.error === "region_blocked") {
+    throw new YoutubeRegionBlockedError(videoId);
+  }
+  // worker 가 자막 부재라고 응답한 경우, Innertube 도 어차피 못 찾을 가능성 크지만 안전장치로 시도
+
+  if (process.env.NODE_ENV !== "production") {
+    console.log(`[youtube] worker miss: ${worker.error}`);
+  }
+
+  // 2차: Vercel IP 에서 Innertube 다중 client (대부분 빈 응답이지만 worker 다운/미설정 대비)
   const { result, attempts } = await fetchViaInnertube(videoId);
 
   if (result) {
