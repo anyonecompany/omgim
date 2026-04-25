@@ -14,6 +14,7 @@ export interface YoutubeFetchResult {
   language: string;
   videoId: string;
   source: "innertube" | "library";
+  client?: string;
 }
 
 const ID_PATTERNS: RegExp[] = [
@@ -23,14 +24,6 @@ const ID_PATTERNS: RegExp[] = [
   /(?:youtube\.com\/embed\/)([\w-]{11})/,
   /(?:m\.youtube\.com\/watch\?(?:[^&]*&)*v=)([\w-]{11})/,
 ];
-
-const HTTP_HEADERS = {
-  "User-Agent":
-    "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36",
-  "Accept-Language": "ko-KR,ko;q=0.9,en-US;q=0.8,en;q=0.7",
-} as const;
-
-const INNERTUBE_CLIENT_VERSION = "2.20240110.00.00";
 
 export function parseVideoId(raw: string): string | null {
   if (!raw) return null;
@@ -43,12 +36,119 @@ export function parseVideoId(raw: string): string | null {
   return null;
 }
 
-// ---- Primary: Innertube /youtubei/v1/player ----
+// ---- Innertube clients ----
+//
+// Vercel 서버 IP 가 WEB 클라이언트로는 봇 감지에 걸려 LOGIN_REQUIRED/ERROR 응답을 받기 때문에
+// 모바일 앱 흉내(ANDROID/iOS) 와 임베디드 TV 클라이언트를 차례로 시도해 우회를 노린다.
+
+interface InnertubeClient {
+  name: string;
+  body: Record<string, unknown>;
+  headers: Record<string, string>;
+}
+
+const CLIENT_WEB: InnertubeClient = {
+  name: "WEB",
+  body: {
+    context: {
+      client: {
+        clientName: "WEB",
+        clientVersion: "2.20240110.00.00",
+        hl: "ko",
+        gl: "KR",
+      },
+    },
+  },
+  headers: {
+    "User-Agent":
+      "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36",
+    "Accept-Language": "ko-KR,ko;q=0.9,en-US;q=0.8,en;q=0.7",
+    "X-YouTube-Client-Name": "1",
+    "X-YouTube-Client-Version": "2.20240110.00.00",
+  },
+};
+
+const CLIENT_ANDROID: InnertubeClient = {
+  name: "ANDROID",
+  body: {
+    context: {
+      client: {
+        clientName: "ANDROID",
+        clientVersion: "19.09.37",
+        androidSdkVersion: 34,
+        userAgent:
+          "com.google.android.youtube/19.09.37 (Linux; U; Android 14; ko_KR)",
+        hl: "ko",
+        gl: "KR",
+      },
+    },
+  },
+  headers: {
+    "User-Agent":
+      "com.google.android.youtube/19.09.37 (Linux; U; Android 14; ko_KR)",
+    "X-YouTube-Client-Name": "3",
+    "X-YouTube-Client-Version": "19.09.37",
+  },
+};
+
+const CLIENT_TV_EMBEDDED: InnertubeClient = {
+  name: "TVHTML5_SIMPLY_EMBEDDED_PLAYER",
+  body: {
+    context: {
+      client: {
+        clientName: "TVHTML5_SIMPLY_EMBEDDED_PLAYER",
+        clientVersion: "2.0",
+        clientScreen: "EMBED",
+        hl: "ko",
+        gl: "KR",
+      },
+      thirdParty: { embedUrl: "https://www.youtube.com" },
+    },
+  },
+  headers: {
+    "User-Agent":
+      "Mozilla/5.0 (PlayStation; PlayStation 4/12.00) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/16.0 Safari/605.1.15",
+    "X-YouTube-Client-Name": "85",
+    "X-YouTube-Client-Version": "2.0",
+  },
+};
+
+const CLIENT_IOS: InnertubeClient = {
+  name: "IOS",
+  body: {
+    context: {
+      client: {
+        clientName: "IOS",
+        clientVersion: "19.09.3",
+        deviceModel: "iPhone14,3",
+        userAgent:
+          "com.google.ios.youtube/19.09.3 (iPhone14,3; U; CPU iOS 17_2 like Mac OS X; ko_KR)",
+        hl: "ko",
+        gl: "KR",
+      },
+    },
+  },
+  headers: {
+    "User-Agent":
+      "com.google.ios.youtube/19.09.3 (iPhone14,3; U; CPU iOS 17_2 like Mac OS X; ko_KR)",
+    "X-YouTube-Client-Name": "5",
+    "X-YouTube-Client-Version": "19.09.3",
+  },
+};
+
+const CLIENT_CHAIN: InnertubeClient[] = [
+  CLIENT_ANDROID,
+  CLIENT_TV_EMBEDDED,
+  CLIENT_IOS,
+  CLIENT_WEB,
+];
+
+// ---- Innertube response types ----
 
 interface InnertubeCaptionTrack {
   baseUrl: string;
   languageCode: string;
-  kind?: string; // "asr" for auto-generated
+  kind?: string;
   name?: { simpleText?: string; runs?: { text: string }[] };
   vssId?: string;
 }
@@ -60,7 +160,7 @@ interface InnertubePlayerResponse {
     };
   };
   playabilityStatus?: {
-    status?: string; // "OK" | "ERROR" | "UNPLAYABLE" | "LOGIN_REQUIRED"
+    status?: string;
     reason?: string;
   };
   videoDetails?: {
@@ -72,35 +172,24 @@ interface InnertubePlayerResponse {
 
 async function fetchInnertubePlayer(
   videoId: string,
+  client: InnertubeClient,
 ): Promise<InnertubePlayerResponse> {
-  const url =
-    "https://www.youtube.com/youtubei/v1/player?prettyPrint=false";
-  const body = {
-    context: {
-      client: {
-        clientName: "WEB",
-        clientVersion: INNERTUBE_CLIENT_VERSION,
-        hl: "ko",
-        gl: "KR",
-      },
-    },
-    videoId,
-  };
+  const url = "https://www.youtube.com/youtubei/v1/player?prettyPrint=false";
+  const body = { ...client.body, videoId };
+
   const res = await fetch(url, {
     method: "POST",
     headers: {
-      ...HTTP_HEADERS,
+      ...client.headers,
       "Content-Type": "application/json",
       Origin: "https://www.youtube.com",
       Referer: `https://www.youtube.com/watch?v=${videoId}`,
-      "X-YouTube-Client-Name": "1",
-      "X-YouTube-Client-Version": INNERTUBE_CLIENT_VERSION,
     },
     body: JSON.stringify(body),
     cache: "no-store",
   });
   if (!res.ok) {
-    throw new Error(`innertube status ${res.status}`);
+    throw new Error(`innertube[${client.name}] status ${res.status}`);
   }
   return (await res.json()) as InnertubePlayerResponse;
 }
@@ -140,7 +229,14 @@ interface Json3Response {
 async function fetchJson3(baseUrl: string): Promise<Json3Response> {
   const sep = baseUrl.includes("?") ? "&" : "?";
   const url = `${baseUrl}${sep}fmt=json3`;
-  const res = await fetch(url, { headers: HTTP_HEADERS, cache: "no-store" });
+  const res = await fetch(url, {
+    headers: {
+      "User-Agent":
+        "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36",
+      "Accept-Language": "ko-KR,ko;q=0.9,en-US;q=0.8,en;q=0.7",
+    },
+    cache: "no-store",
+  });
   if (!res.ok) {
     throw new Error(`json3 status ${res.status}`);
   }
@@ -175,39 +271,116 @@ function parseJson3(
   return { utterances, plainText, durationSec: lastEnd };
 }
 
-async function fetchViaInnertube(videoId: string): Promise<YoutubeFetchResult> {
-  const player = await fetchInnertubePlayer(videoId);
+interface InnertubeAttempt {
+  client: string;
+  ok: boolean;
+  status?: string;
+  reason?: string;
+  trackCount?: number;
+  error?: string;
+}
 
-  const status = player.playabilityStatus?.status ?? "OK";
-  if (status === "ERROR" || status === "UNPLAYABLE") {
-    throw new YoutubeVideoNotFoundError(videoId);
+async function tryInnertubeClient(
+  videoId: string,
+  client: InnertubeClient,
+): Promise<{ result?: YoutubeFetchResult; attempt: InnertubeAttempt }> {
+  try {
+    const player = await fetchInnertubePlayer(videoId, client);
+    const status = player.playabilityStatus?.status ?? "OK";
+    const reason = player.playabilityStatus?.reason;
+
+    if (status === "ERROR" || status === "UNPLAYABLE") {
+      return {
+        attempt: { client: client.name, ok: false, status, reason },
+      };
+    }
+    if (status === "LOGIN_REQUIRED") {
+      return {
+        attempt: { client: client.name, ok: false, status, reason },
+      };
+    }
+
+    const tracks =
+      player.captions?.playerCaptionsTracklistRenderer?.captionTracks ?? [];
+    if (tracks.length === 0) {
+      return {
+        attempt: {
+          client: client.name,
+          ok: false,
+          status,
+          reason: "no caption tracks",
+          trackCount: 0,
+        },
+      };
+    }
+
+    const track = selectTrack(tracks);
+    if (!track) {
+      return {
+        attempt: {
+          client: client.name,
+          ok: false,
+          status,
+          reason: "track selection failed",
+          trackCount: tracks.length,
+        },
+      };
+    }
+
+    const json3 = await fetchJson3(track.baseUrl);
+    const parsed = parseJson3(json3);
+    if (parsed.utterances.length === 0) {
+      return {
+        attempt: {
+          client: client.name,
+          ok: false,
+          status,
+          reason: "empty json3 events",
+          trackCount: tracks.length,
+        },
+      };
+    }
+
+    return {
+      result: {
+        utterances: parsed.utterances,
+        plainText: parsed.plainText,
+        durationSec: parsed.durationSec,
+        language: track.languageCode,
+        videoId,
+        source: "innertube",
+        client: client.name,
+      },
+      attempt: {
+        client: client.name,
+        ok: true,
+        status,
+        trackCount: tracks.length,
+      },
+    };
+  } catch (e) {
+    return {
+      attempt: {
+        client: client.name,
+        ok: false,
+        error: (e as Error).message,
+      },
+    };
   }
-  if (status === "LOGIN_REQUIRED") {
-    throw new YoutubeRegionBlockedError(videoId);
+}
+
+async function fetchViaInnertube(
+  videoId: string,
+): Promise<{ result?: YoutubeFetchResult; attempts: InnertubeAttempt[] }> {
+  const attempts: InnertubeAttempt[] = [];
+
+  for (const client of CLIENT_CHAIN) {
+    const { result, attempt } = await tryInnertubeClient(videoId, client);
+    attempts.push(attempt);
+    if (result) return { result, attempts };
   }
 
-  const tracks =
-    player.captions?.playerCaptionsTracklistRenderer?.captionTracks ?? [];
-  if (tracks.length === 0) {
-    throw new YoutubeNoCaptionsError(videoId);
-  }
-  const track = selectTrack(tracks);
-  if (!track) throw new YoutubeNoCaptionsError(videoId);
-
-  const json3 = await fetchJson3(track.baseUrl);
-  const parsed = parseJson3(json3);
-  if (parsed.utterances.length === 0) {
-    throw new YoutubeNoCaptionsError(videoId);
-  }
-
-  return {
-    utterances: parsed.utterances,
-    plainText: parsed.plainText,
-    durationSec: parsed.durationSec,
-    language: track.languageCode,
-    videoId,
-    source: "innertube",
-  };
+  return { attempts };
 }
 
 // ---- Fallback: youtube-transcript 라이브러리 ----
@@ -264,29 +437,50 @@ async function fetchViaLibrary(videoId: string): Promise<YoutubeFetchResult> {
 export async function fetchYoutubeTranscript(
   videoId: string,
 ): Promise<YoutubeFetchResult> {
-  // 1차: Innertube API. Vercel 서버 IP 가 봇으로 차단돼 LOGIN_REQUIRED/ERROR 받는 경우가
-  // 빈번하므로, Innertube 의 어떤 에러든 일단 라이브러리 fallback 으로 한 번 더 시도.
-  let innertubeError: unknown = null;
-  try {
-    return await fetchViaInnertube(videoId);
-  } catch (e) {
-    innertubeError = e;
+  const { result, attempts } = await fetchViaInnertube(videoId);
+
+  if (result) {
+    if (process.env.NODE_ENV !== "production") {
+      console.log(
+        `[youtube] innertube success via ${result.client}`,
+        JSON.stringify(attempts),
+      );
+    }
+    return result;
   }
 
-  // 2차: youtube-transcript 라이브러리 (Rick Astley 등 일부 영상 동작 확인됨)
+  // 모든 Innertube client 실패 → 라이브러리 폴백
+  if (process.env.NODE_ENV !== "production") {
+    console.log(
+      "[youtube] all innertube clients failed",
+      JSON.stringify(attempts),
+    );
+  }
+
   try {
     return await fetchViaLibrary(videoId);
   } catch (libError) {
-    // 둘 다 실패. 의미 있는 에러를 우선 노출.
+    // attempts 분석으로 의미 있는 에러 노출
+    const allError = attempts.every(
+      (a) => a.status === "ERROR" || a.status === "UNPLAYABLE",
+    );
+    if (allError) {
+      throw new YoutubeVideoNotFoundError(videoId);
+    }
+
+    const noCaptionsAcrossAll = attempts.every(
+      (a) =>
+        a.reason === "no caption tracks" ||
+        a.reason === "empty json3 events" ||
+        a.reason === "track selection failed",
+    );
     if (
-      innertubeError instanceof YoutubeNoCaptionsError ||
+      noCaptionsAcrossAll ||
       libError instanceof YoutubeNoCaptionsError
     ) {
       throw new YoutubeNoCaptionsError(videoId);
     }
-    if (innertubeError instanceof YoutubeVideoNotFoundError) {
-      throw innertubeError;
-    }
+
     throw libError;
   }
 }
