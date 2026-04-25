@@ -13,7 +13,7 @@ import {
 } from "@/lib/youtube";
 
 export const runtime = "nodejs";
-export const maxDuration = 30;
+export const maxDuration = 60;
 
 // 단순 in-memory rate limit (서버리스 instance 단위라 엄격 제한은 아님 — DMCA 예방용)
 const RATE_LIMIT_WINDOW_MS = 60_000;

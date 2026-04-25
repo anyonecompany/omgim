@@ -83,49 +83,69 @@ def transcript(
         )
 
     api = YouTubeTranscriptApi()
-    try:
-        transcript_list = api.list(video_id)
-    except VideoUnavailable:
-        raise HTTPException(
-            status_code=404,
-            detail={
-                "error": "video_not_found",
-                "message": "Video is unavailable or removed",
-            },
-        )
-    except VideoUnplayable as e:
-        msg = str(e).lower()
-        if "private" in msg:
+
+    # YouTube 의 클라우드 IP 봇 감지가 확률적으로 RequestBlocked 를 던지므로
+    # list() 호출은 백오프 재시도. 영상 자체 문제(unavailable/private/disabled) 는
+    # 즉시 노출.
+    transcript_list = None
+    last_blocked_msg = ""
+    for attempt in range(4):
+        try:
+            transcript_list = api.list(video_id)
+            break
+        except VideoUnavailable:
             raise HTTPException(
                 status_code=404,
                 detail={
-                    "error": "video_private",
-                    "message": "Video is private",
+                    "error": "video_not_found",
+                    "message": "Video is unavailable or removed",
                 },
             )
-        raise HTTPException(
-            status_code=451,
-            detail={
-                "error": "region_blocked",
-                "message": "Video is unplayable (region or other restriction)",
-            },
-        )
-    except TranscriptsDisabled:
-        raise HTTPException(
-            status_code=404,
-            detail={
-                "error": "no_captions",
-                "message": "Transcripts disabled by uploader",
-            },
-        )
-    except Exception as e:
-        raise HTTPException(
-            status_code=502,
-            detail={
-                "error": "fetch_failed",
-                "message": f"{type(e).__name__}: {str(e)[:200]}",
-            },
-        )
+        except VideoUnplayable as e:
+            msg = str(e).lower()
+            if "private" in msg:
+                raise HTTPException(
+                    status_code=404,
+                    detail={
+                        "error": "video_private",
+                        "message": "Video is private",
+                    },
+                )
+            raise HTTPException(
+                status_code=451,
+                detail={
+                    "error": "region_blocked",
+                    "message": "Video is unplayable (region or other restriction)",
+                },
+            )
+        except TranscriptsDisabled:
+            raise HTTPException(
+                status_code=404,
+                detail={
+                    "error": "no_captions",
+                    "message": "Transcripts disabled by uploader",
+                },
+            )
+        except RequestBlocked as e:
+            last_blocked_msg = str(e)[:200]
+            if attempt < 3:
+                time.sleep(2.0 * (attempt + 1))
+                continue
+            raise HTTPException(
+                status_code=502,
+                detail={
+                    "error": "fetch_failed",
+                    "message": f"RequestBlocked after retries: {last_blocked_msg}",
+                },
+            )
+        except Exception as e:
+            raise HTTPException(
+                status_code=502,
+                detail={
+                    "error": "fetch_failed",
+                    "message": f"{type(e).__name__}: {str(e)[:200]}",
+                },
+            )
 
     selected = None
     selected_kind: Literal["manual", "asr"] = "manual"
@@ -164,15 +184,35 @@ def transcript(
             },
         )
 
-    try:
-        fetched = selected.fetch()
-    except Exception as e:
+    fetched = None
+    for attempt in range(4):
+        try:
+            fetched = selected.fetch()
+            break
+        except RequestBlocked as e:
+            if attempt < 3:
+                time.sleep(2.0 * (attempt + 1))
+                continue
+            raise HTTPException(
+                status_code=502,
+                detail={
+                    "error": "fetch_failed",
+                    "message": f"fetch RequestBlocked after retries: {str(e)[:200]}",
+                },
+            )
+        except Exception as e:
+            raise HTTPException(
+                status_code=502,
+                detail={
+                    "error": "fetch_failed",
+                    "message": f"fetch: {type(e).__name__}: {str(e)[:200]}",
+                },
+            )
+
+    if fetched is None:
         raise HTTPException(
             status_code=502,
-            detail={
-                "error": "fetch_failed",
-                "message": f"fetch: {type(e).__name__}: {str(e)[:200]}",
-            },
+            detail={"error": "fetch_failed", "message": "fetch returned None"},
         )
 
     segments: list[Segment] = []

@@ -475,7 +475,7 @@ async function fetchViaWorker(
       method: "GET",
       headers,
       cache: "no-store",
-      signal: AbortSignal.timeout(20_000),
+      signal: AbortSignal.timeout(45_000),
     });
   } catch (e) {
     return { error: `network: ${(e as Error).message}` };
