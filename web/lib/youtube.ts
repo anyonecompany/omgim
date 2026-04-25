@@ -264,31 +264,31 @@ async function fetchViaLibrary(videoId: string): Promise<YoutubeFetchResult> {
 export async function fetchYoutubeTranscript(
   videoId: string,
 ): Promise<YoutubeFetchResult> {
-  // 1차: Innertube API
+  // 1차: Innertube API. Vercel 서버 IP 가 봇으로 차단돼 LOGIN_REQUIRED/ERROR 받는 경우가
+  // 빈번하므로, Innertube 의 어떤 에러든 일단 라이브러리 fallback 으로 한 번 더 시도.
+  let innertubeError: unknown = null;
   try {
     return await fetchViaInnertube(videoId);
   } catch (e) {
-    // no_captions / video_not_found / region_blocked 는 즉시 상위로
-    if (
-      e instanceof YoutubeNoCaptionsError ||
-      e instanceof YoutubeVideoNotFoundError ||
-      e instanceof YoutubeRegionBlockedError
-    ) {
-      // captions 없음인 경우 fallback 라이브러리가 다른 track 을 찾을 수도 있으니 한 번 더 시도
-      if (e instanceof YoutubeNoCaptionsError) {
-        try {
-          return await fetchViaLibrary(videoId);
-        } catch {
-          throw e;
-        }
-      }
-      throw e;
-    }
-    // 기타 네트워크·파싱 실패 → 라이브러리로 fallback
+    innertubeError = e;
   }
 
-  // 2차: youtube-transcript 라이브러리 (이전 Rick Astley 되던 방식)
-  return await fetchViaLibrary(videoId);
+  // 2차: youtube-transcript 라이브러리 (Rick Astley 등 일부 영상 동작 확인됨)
+  try {
+    return await fetchViaLibrary(videoId);
+  } catch (libError) {
+    // 둘 다 실패. 의미 있는 에러를 우선 노출.
+    if (
+      innertubeError instanceof YoutubeNoCaptionsError ||
+      libError instanceof YoutubeNoCaptionsError
+    ) {
+      throw new YoutubeNoCaptionsError(videoId);
+    }
+    if (innertubeError instanceof YoutubeVideoNotFoundError) {
+      throw innertubeError;
+    }
+    throw libError;
+  }
 }
 
 // ---- Misc utilities ----
