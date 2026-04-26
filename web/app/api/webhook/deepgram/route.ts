@@ -1,6 +1,7 @@
-import { put, del } from "@vercel/blob";
+import { put } from "@vercel/blob";
 import { NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabase";
+import { tryDeleteOriginalBlob } from "@/lib/blob-cleanup";
 import {
   DEEPGRAM_COST_PER_MIN,
   buildSrt,
@@ -69,24 +70,7 @@ export async function POST(req: Request) {
       })
       .eq("id", jobId);
 
-    // 프라이버시: 원본 영상 Blob 삭제 (전사 완료 후 보관 불요)
-    try {
-      const { data: job } = await supabaseAdmin
-        .from("jobs")
-        .select("blob_url")
-        .eq("id", jobId)
-        .single();
-      if (job?.blob_url) {
-        await del(job.blob_url);
-        await supabaseAdmin
-          .from("jobs")
-          .update({ blob_url: null })
-          .eq("id", jobId);
-      }
-    } catch (delErr) {
-      // 삭제 실패해도 전사 결과는 이미 저장됨 — 로그만
-      console.error("[webhook/deepgram] original blob delete failed:", delErr);
-    }
+    await tryDeleteOriginalBlob(jobId);
 
     return NextResponse.json({ ok: true });
   } catch (e) {
@@ -97,6 +81,8 @@ export async function POST(req: Request) {
         error: (e as Error).message?.slice(0, 500) ?? "webhook failed",
       })
       .eq("id", jobId);
+    // 전사 실패 시에도 원본 영상은 즉시 삭제 (프라이버시 우선).
+    await tryDeleteOriginalBlob(jobId).catch(() => {});
     return NextResponse.json(
       { error: (e as Error).message },
       { status: 500 },

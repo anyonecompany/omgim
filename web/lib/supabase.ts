@@ -33,6 +33,7 @@ export interface Job {
   cost_usd: number | null;
   engine: string | null;
   error: string | null;
+  deletion_pending: boolean;
   created_at: string;
   updated_at: string;
   completed_at: string | null;
