@@ -1,0 +1,66 @@
+name: omgim cron pending check
+
+# 매주 일요일 09:00 KST (= 일요일 00:00 UTC) 에 실행.
+# /api/cron/cleanup-blobs 의 processed 값과 7일 이상 묵은 deletion_pending 행 수를 확인,
+# 이상치(processed>=5 또는 old_pending>0) 발견 시 Slack #dev-report 알림.
+
+on:
+  schedule:
+    - cron: '0 0 * * 0'
+  workflow_dispatch:
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Call cleanup-blobs cron
+        id: cron
+        env:
+          CRON_SECRET: ${{ secrets.CRON_SECRET }}
+        run: |
+          response=$(curl -sS \
+            -H "Authorization: Bearer $CRON_SECRET" \
+            https://omgim.xyz/api/cron/cleanup-blobs)
+          echo "Response: $response"
+          processed=$(echo "$response" | jq -r '.processed // 0')
+          echo "processed=$processed" >> "$GITHUB_OUTPUT"
+
+      - name: Count old pending rows in Supabase
+        id: pending
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+        run: |
+          seven_days_ago=$(date -u -d '7 days ago' +%Y-%m-%dT%H:%M:%SZ)
+          count=$(curl -sS \
+            -H "apikey: $SUPABASE_SERVICE_ROLE_KEY" \
+            -H "Authorization: Bearer $SUPABASE_SERVICE_ROLE_KEY" \
+            "$SUPABASE_URL/rest/v1/jobs?deletion_pending=eq.true&created_at=lt.$seven_days_ago&select=id&limit=200" \
+            | jq 'length')
+          count=${count:-0}
+          echo "Old pending (>7d): $count"
+          echo "old_pending=$count" >> "$GITHUB_OUTPUT"
+
+      - name: Decide if alert needed
+        id: anomaly
+        run: |
+          processed="${{ steps.cron.outputs.processed }}"
+          old_pending="${{ steps.pending.outputs.old_pending }}"
+          if [ "${processed:-0}" -ge 5 ] || [ "${old_pending:-0}" -gt 0 ]; then
+            echo "alert=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "alert=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Slack notify on anomaly
+        if: steps.anomaly.outputs.alert == 'true'
+        env:
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
+        run: |
+          processed="${{ steps.cron.outputs.processed }}"
+          old_pending="${{ steps.pending.outputs.old_pending }}"
+          payload=$(jq -nc \
+            --arg p "$processed" \
+            --arg o "$old_pending" \
+            '{text: ":warning: omgim Blob 삭제 점검 이상치\n• processed=\($p) (>=5면 만성 삭제 실패 의심)\n• old_pending(>7일)=\($o) (영구 누수 신호)\n수동 점검: https://omgim.xyz/api/cron/cleanup-blobs"}')
+          curl -sS -X POST -H 'Content-Type: application/json' -d "$payload" "$SLACK_WEBHOOK_URL"
