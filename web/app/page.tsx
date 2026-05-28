@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import Image from "next/image";
 import {
   Mic,
@@ -35,15 +35,17 @@ export default function Home() {
   const { quota, refresh: refreshQuota } = useQuota();
   const phase = state.phase;
   const idle = phase === "idle";
+  const prevPhaseRef = useRef(phase);
 
   const stageSubtitle =
     source === "youtube" ? "YouTube 링크" : (file?.name ?? "");
 
-  // 전사 완료 시 쿼터 갱신
-  if (phase === "completed") {
-    // side effect within render is OK for idempotent fetch; React will dedupe
-    void refreshQuota();
-  }
+  useEffect(() => {
+    if (phase === "completed" && prevPhaseRef.current !== "completed") {
+      refreshQuota();
+    }
+    prevPhaseRef.current = phase;
+  }, [phase, refreshQuota]);
 
   return (
     <div className="flex flex-1 flex-col">
