@@ -29,9 +29,22 @@ export async function POST(req: Request) {
 
   try {
     const { text, utterances, duration } = extractTranscript(payload);
+
+    if (!text && utterances.length === 0) {
+      await supabaseAdmin
+        .from("jobs")
+        .update({
+          status: "failed",
+          error: "음성을 인식하지 못했어요. 파일에 사람 목소리가 포함되어 있는지 확인해 주세요.",
+        })
+        .eq("id", jobId);
+      await tryDeleteOriginalBlob(jobId).catch(() => {});
+      return NextResponse.json({ ok: true });
+    }
+
     const txt = buildTxt(utterances, text);
-    const srt = buildSrt(utterances);
-    const vtt = buildVtt(utterances);
+    const srt = buildSrt(utterances) || " ";
+    const vtt = buildVtt(utterances) || "WEBVTT\n";
 
     const blobOpts = {
       access: "public" as const,
