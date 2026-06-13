@@ -9,6 +9,7 @@ Fly.io 에서 실행되는 단일 목적 워커. Vercel Functions 가 봇으로
 from __future__ import annotations
 
 import os
+import time
 from typing import Literal
 
 from fastapi import FastAPI, Header, HTTPException
@@ -16,6 +17,7 @@ from pydantic import BaseModel
 from youtube_transcript_api import YouTubeTranscriptApi
 from youtube_transcript_api._errors import (
     NoTranscriptFound,
+    RequestBlocked,
     TranscriptsDisabled,
     VideoUnavailable,
     VideoUnplayable,
