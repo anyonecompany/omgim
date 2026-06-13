@@ -61,7 +61,7 @@ export async function POST(req: Request) {
           ? (language as TranscribeLanguage)
           : "auto";
 
-        await supabaseAdmin.from("jobs").upsert({
+        const { error: upsertError } = await supabaseAdmin.from("jobs").upsert({
           id: jobId,
           client_key: clientKey,
           status: "transcribing",
@@ -69,7 +69,11 @@ export async function POST(req: Request) {
           size_bytes: size,
           blob_url: blob.url,
           engine: "deepgram",
+          source: "upload",
         });
+        if (upsertError) {
+          throw new Error(`job upsert failed: ${upsertError.message}`);
+        }
 
         const callbackUrl = `${origin}/api/webhook/deepgram?jobId=${jobId}`;
         const dgUrl = buildDeepgramAsyncUrl(callbackUrl, { language: lang });
